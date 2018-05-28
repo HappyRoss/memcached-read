@@ -1080,18 +1080,18 @@ int lru_pull_tail(const int orig_id, const int cur_lru,
             if (settings.tail_repair_time &&
                     search->time + settings.tail_repair_time < current_time) {
                 itemstats[id].tailrepairs++;
-                search->refcount = 1;//search的应用计数设置为1
+                search->refcount = 1;//search的引用计数设置为1
                 /* This will call item_remove -> item_free since refcnt is 1 */
                 do_item_unlink_nolock(search, hv);
                 item_trylock_unlock(hold_lock);
                 continue;
             }
         }
-        //因为这个循环是从lru链表的后面开始遍历的。所以一开始search就指向了最不常用的item
+        //search引用计数为2 因为这个循环是从lru链表的后面开始遍历的。所以一开始search就指向了最不常用的item
         /* Expired or flushed */
         if ((search->exptime != 0 && search->exptime < current_time)
             || item_is_flushed(search)) {//expired or flushed
-            itemstats[id].reclaimed++;
+            itemstats[id].reclaimed++;//item回收统计加1
             if ((search->it_flags & ITEM_FETCHED) == 0) {
                 itemstats[id].expired_unfetched++;
             }
@@ -1108,7 +1108,7 @@ int lru_pull_tail(const int orig_id, const int cur_lru,
 
         /* If we're HOT_LRU or WARM_LRU and over size limit, send to COLD_LRU.
          * If we're COLD_LRU, send to WARM_LRU unless we need to evict
-         */
+         */  //search引用计数为2 not expired need not flushed
         switch (cur_lru) {
             case HOT_LRU:
                 limit = total_bytes * settings.hot_lru_pct / 100;

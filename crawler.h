@@ -5,7 +5,7 @@ typedef struct {
     uint64_t histo[61];
     uint64_t ttl_hourplus;
     uint64_t noexp;
-    uint64_t reclaimed;
+    uint64_t reclaimed;//回收
     uint64_t seen;
     rel_time_t start_time;
     rel_time_t end_time;
