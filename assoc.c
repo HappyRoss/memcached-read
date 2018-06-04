@@ -60,11 +60,11 @@ static bool started_expanding = false;
  */
 static unsigned int expand_bucket = 0;
 
-void assoc_init(const int hashtable_init) {
+void assoc_init(const int hashtable_init) {//hash表初始化
     if (hashtable_init) {
         hashpower = hashtable_init;
     }
-    primary_hashtable = calloc(hashsize(hashpower), sizeof(void *));
+    primary_hashtable = calloc(hashsize(hashpower), sizeof(void *));//hash表 其中槽数为hashsize(hashpower)
     if (! primary_hashtable) {
         fprintf(stderr, "Failed to init hashtable.\n");
         exit(EXIT_FAILURE);
@@ -80,22 +80,22 @@ item *assoc_find(const char *key, const size_t nkey, const uint32_t hv) {
     unsigned int oldbucket;
 
     if (expanding &&
-        (oldbucket = (hv & hashmask(hashpower - 1))) >= expand_bucket)
+        (oldbucket = (hv & hashmask(hashpower - 1))) >= expand_bucket)//找出槽位hv & hashmask(hashpower - 1)
     {
         it = old_hashtable[oldbucket];
     } else {
-        it = primary_hashtable[hv & hashmask(hashpower)];
+        it = primary_hashtable[hv & hashmask(hashpower)];//primary hash表 计算出槽位hv&hashmask(hashpower)
     }
 
     item *ret = NULL;
     int depth = 0;
     while (it) {
-        if ((nkey == it->nkey) && (memcmp(key, ITEM_key(it), nkey) == 0)) {
+        if ((nkey == it->nkey) && (memcmp(key, ITEM_key(it), nkey) == 0)) {//判断是否找到 key的大小 以及key字符串是否相等
             ret = it;
             break;
         }
-        it = it->h_next;
-        ++depth;
+        it = it->h_next;//it指向list中的next  memcacahed中是使用链地址方法解决冲突
+        ++depth;//
     }
     MEMCACHED_ASSOC_FIND(key, nkey, depth);
     return ret;
@@ -104,42 +104,42 @@ item *assoc_find(const char *key, const size_t nkey, const uint32_t hv) {
 /* returns the address of the item pointer before the key.  if *item == 0,
    the item wasn't found */
 
-static item** _hashitem_before (const char *key, const size_t nkey, const uint32_t hv) {
+static item** _hashitem_before (const char *key, const size_t nkey, const uint32_t hv) {//查找item 返回前驱节点的h_next成员地址 如果查找失败那么就返回冲突链中最后一个节点的h_next成员地址。因为最后一个节点的h_next的值为NULL。通过对返回值使用*运算符即可以知道有查找成功
     item **pos;
     unsigned int oldbucket;
 
     if (expanding &&
-        (oldbucket = (hv & hashmask(hashpower - 1))) >= expand_bucket)
+        (oldbucket = (hv & hashmask(hashpower - 1))) >= expand_bucket)//old_hashtable
     {
         pos = &old_hashtable[oldbucket];
     } else {
-        pos = &primary_hashtable[hv & hashmask(hashpower)];
+        pos = &primary_hashtable[hv & hashmask(hashpower)];//primary_hashtable
     }
-
+    //遍历冲突链中查找item
     while (*pos && ((nkey != (*pos)->nkey) || memcmp(key, ITEM_key(*pos), nkey))) {
         pos = &(*pos)->h_next;
     }
-    return pos;
+    return pos;//*pos就可以知道有没查找成功 如果*pos等于NULL则查找失败 否则查找成功
 }
 
 /* grows the hashtable to the next power of 2. */
-static void assoc_expand(void) {
-    old_hashtable = primary_hashtable;
+static void assoc_expand(void) {//扩展hash表
+    old_hashtable = primary_hashtable;//将primary_hashtable赋值为old_hashtable
 
-    primary_hashtable = calloc(hashsize(hashpower + 1), sizeof(void *));
+    primary_hashtable = calloc(hashsize(hashpower + 1), sizeof(void *));//重新申请primary_hashtable 其中大小为之前的2倍hashsize(hashpower + 1)
     if (primary_hashtable) {
         if (settings.verbose > 1)
             fprintf(stderr, "Hash table expansion starting\n");
-        hashpower++;
-        expanding = true;
-        expand_bucket = 0;
+        hashpower++;//hashpower自加1
+        expanding = true;//设置expanding为true 即hash表进行了扩展
+        expand_bucket = 0;//
         STATS_LOCK();
         stats_state.hash_power_level = hashpower;
         stats_state.hash_bytes += hashsize(hashpower) * sizeof(void *);
         stats_state.hash_is_expanding = true;
         STATS_UNLOCK();
     } else {
-        primary_hashtable = old_hashtable;
+        primary_hashtable = old_hashtable;//如果扩展申请内存失败 将使用原先的内存
         /* Bad news, but we can keep running. */
     }
 }
@@ -149,11 +149,11 @@ static void assoc_start_expand(void) {
         return;
 
     started_expanding = true;
-    pthread_cond_signal(&maintenance_cond);
+    pthread_cond_signal(&maintenance_cond);//条件变量
 }
 
 /* Note: this isn't an assoc_update.  The key must not already exist to call this */
-int assoc_insert(item *it, const uint32_t hv) {
+int assoc_insert(item *it, const uint32_t hv) {//insert操作  hv为item键值的hash值
     unsigned int oldbucket;
 
 //    assert(assoc_find(ITEM_key(it), it->nkey) == 0);  /* shouldn't have duplicately named things defined */
@@ -161,15 +161,15 @@ int assoc_insert(item *it, const uint32_t hv) {
     if (expanding &&
         (oldbucket = (hv & hashmask(hashpower - 1))) >= expand_bucket)
     {
-        it->h_next = old_hashtable[oldbucket];
+        it->h_next = old_hashtable[oldbucket];//在头部插入
         old_hashtable[oldbucket] = it;
     } else {
-        it->h_next = primary_hashtable[hv & hashmask(hashpower)];
+        it->h_next = primary_hashtable[hv & hashmask(hashpower)];//在头部插入
         primary_hashtable[hv & hashmask(hashpower)] = it;
     }
 
     pthread_mutex_lock(&hash_items_counter_lock);
-    hash_items++;
+    hash_items++;//hash表中的item个数加1
     if (! expanding && hash_items > (hashsize(hashpower) * 3) / 2 &&
           hashpower < HASHPOWER_MAX) {
         assoc_start_expand();
@@ -180,13 +180,13 @@ int assoc_insert(item *it, const uint32_t hv) {
     return 1;
 }
 
-void assoc_delete(const char *key, const size_t nkey, const uint32_t hv) {
-    item **before = _hashitem_before(key, nkey, hv);
+void assoc_delete(const char *key, const size_t nkey, const uint32_t hv) {//delete操作 key为键 nkey为键的长度 hv为key的hash值
+    item **before = _hashitem_before(key, nkey, hv);//找到前驱
 
     if (*before) {
         item *nxt;
         pthread_mutex_lock(&hash_items_counter_lock);
-        hash_items--;
+        hash_items--;//hash中item个数减1
         pthread_mutex_unlock(&hash_items_counter_lock);
         /* The DTrace probe cannot be triggered as the last instruction
          * due to possible tail-optimization by the compiler

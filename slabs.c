@@ -358,16 +358,16 @@ static void do_slabs_free(void *ptr, const size_t size, unsigned int id) {
         return;
 
     MEMCACHED_SLABS_FREE(size, id, ptr);
-    p = &slabclass[id];
+    p = &slabclass[id];//p指向slabclass的第id个数组
 
-    it = (item *)ptr;
+    it = (item *)ptr;//转为item*类型指针
     if ((it->it_flags & ITEM_CHUNKED) == 0) {
         it->it_flags = ITEM_SLABBED;
         it->slabs_clsid = 0;
         it->prev = 0;//it->prev
         it->next = p->slots;//it->next指向头
         if (it->next) it->next->prev = it;//修改指向
-        p->slots = it;//修改p->slots的指向
+        p->slots = it;//修改p->slots的指向 p->slots指向列表的头部
 
         p->sl_curr++;//可用个数++
         p->requested -= size;//
