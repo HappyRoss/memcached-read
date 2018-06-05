@@ -6826,7 +6826,7 @@ int main (int argc, char **argv) {
     /* start up worker threads if MT mode */
     memcached_thread_init(settings.num_threads, NULL);
 
-    if (start_assoc_maint && start_assoc_maintenance_thread() == -1) {
+    if (start_assoc_maint && start_assoc_maintenance_thread() == -1) {//启动数据迁移线程
         exit(EXIT_FAILURE);
     }
 
