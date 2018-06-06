@@ -408,19 +408,19 @@ extern struct settings settings;
 /**
  * Structure for storing items within memcached.
  */
-typedef struct _stritem {
+typedef struct _stritem {//slab分配器负责分配一个item 但这个item并非直接被哈希表进行管理 从hash表的删除函数中可知 对hash表中的某一个item进行删除只是简单地将这个item从hash表的冲突链中删除 并没有把item内存归还给slab 事实上 slab分配器分配出来的item是由一个LRU队列进行管理的 当一个item从LRU队列中删除就会归还给slab分配器 LRU队列是一个双向链表 在memcached中有多条LRU队列 条数等于item的种类数 所以 同一类item将放入同一条LRU队列中 之所以使用双向链表 是因为要方便从前后两个方面插入和遍历链表
     /* Protected by LRU locks */
-    struct _stritem *next;
-    struct _stritem *prev;
+    struct _stritem *next; //next指针 用于LRU链表
+    struct _stritem *prev; //prev指针 用于LRU链表
     /* Rest are protected by an item lock */
-    struct _stritem *h_next;    /* hash chain next */
-    rel_time_t      time;       /* least recent access */
-    rel_time_t      exptime;    /* expire time */
+    struct _stritem *h_next;    /* hash chain next */  //h_next指针 用于hash表的冲突链
+    rel_time_t      time;       /* least recent access */  //最后一次访问 绝对时间
+    rel_time_t      exptime;    /* expire time */  //有效时间
     int             nbytes;     /* size of data */
     unsigned short  refcount;
     uint8_t         nsuffix;    /* length of flags-and-length string */
     uint8_t         it_flags;   /* ITEM_* above */
-    uint8_t         slabs_clsid;/* which slab class we're in */
+    uint8_t         slabs_clsid;/* which slab class we're in */ //指明item属于哪个slab class
     uint8_t         nkey;       /* key length, w/terminating null and padding */
     /* this odd type prevents type-punning issues when we do
      * the little shuffle to save space when not using CAS. */

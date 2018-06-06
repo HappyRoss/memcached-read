@@ -47,10 +47,10 @@ typedef struct {
     rel_time_t evicted_time;
 } itemstats_t;
 
-static item *heads[LARGEST_ID];
-static item *tails[LARGEST_ID];
+static item *heads[LARGEST_ID];//指向每一个LRU队列头
+static item *tails[LARGEST_ID];//指向每一个LRU队列尾
 static itemstats_t itemstats[LARGEST_ID];
-static unsigned int sizes[LARGEST_ID];
+static unsigned int sizes[LARGEST_ID];//每一个LRU队列有多少个item
 static uint64_t sizes_bytes[LARGEST_ID];
 static unsigned int *stats_sizes_hist = NULL;
 static uint64_t stats_sizes_cas_min = 0;
@@ -374,28 +374,28 @@ bool item_size_ok(const size_t nkey, const int flags, const int nbytes) {
     return slabs_clsid(ntotal) != 0;
 }
 
-static void do_item_link_q(item *it) { /* item is the new head */
+static void do_item_link_q(item *it) { /* item is the new head */ //memcached插入操作耗时是常数
     item **head, **tail;
     assert((it->it_flags & ITEM_SLABBED) == 0);
 
-    head = &heads[it->slabs_clsid];
-    tail = &tails[it->slabs_clsid];
+    head = &heads[it->slabs_clsid];//LRU队列的头
+    tail = &tails[it->slabs_clsid];//LRU队列的尾
     assert(it != *head);
     assert((*head && *tail) || (*head == 0 && *tail == 0));
-    it->prev = 0;
-    it->next = *head;
-    if (it->next) it->next->prev = it;
-    *head = it;
-    if (*tail == 0) *tail = it;
-    sizes[it->slabs_clsid]++;
-    sizes_bytes[it->slabs_clsid] += ITEM_ntotal(it);
+    it->prev = 0;//it的prev为0
+    it->next = *head;//it的next指向队列头
+    if (it->next) it->next->prev = it;//如果it的next不为NULL 则设置it的next指向item的prev指向it
+    *head = it;//更新队列头指向
+    if (*tail == 0) *tail = it;//判断队列尾是否为NULL 如果是则队列尾指向it
+    sizes[it->slabs_clsid]++;//item大小为it->slabs_clsid的队列的item个数加1
+    sizes_bytes[it->slabs_clsid] += ITEM_ntotal(it);//item大小为it->slabs_clsid的队列的bytes数
     return;
 }
 
-static void item_link_q(item *it) {
-    pthread_mutex_lock(&lru_locks[it->slabs_clsid]);
-    do_item_link_q(it);
-    pthread_mutex_unlock(&lru_locks[it->slabs_clsid]);
+static void item_link_q(item *it) {//将item插入到LRU队列的头部
+    pthread_mutex_lock(&lru_locks[it->slabs_clsid]);//获取item类型为it->slabs_clsid的LRU队列的锁
+    do_item_link_q(it);//插入具体操作
+    pthread_mutex_unlock(&lru_locks[it->slabs_clsid]);//释放锁
 }
 
 static void item_link_q_warm(item *it) {
@@ -405,33 +405,33 @@ static void item_link_q_warm(item *it) {
     pthread_mutex_unlock(&lru_locks[it->slabs_clsid]);
 }
 
-static void do_item_unlink_q(item *it) {
+static void do_item_unlink_q(item *it) {//将it从对应的LRU队列中删除 //memcached插入操作耗时是常数
     item **head, **tail;
-    head = &heads[it->slabs_clsid];
-    tail = &tails[it->slabs_clsid];
+    head = &heads[it->slabs_clsid];//item大小为it->slabs_clsid的队列头
+    tail = &tails[it->slabs_clsid];//item大小为it->slabs_clsid的队列尾
 
-    if (*head == it) {
+    if (*head == it) {//如果it是队列头
         assert(it->prev == 0);
         *head = it->next;
     }
-    if (*tail == it) {
+    if (*tail == it) {//如果it是队列尾
         assert(it->next == 0);
         *tail = it->prev;
     }
     assert(it->next != it);
     assert(it->prev != it);
 
-    if (it->next) it->next->prev = it->prev;
-    if (it->prev) it->prev->next = it->next;
-    sizes[it->slabs_clsid]--;
-    sizes_bytes[it->slabs_clsid] -= ITEM_ntotal(it);
+    if (it->next) it->next->prev = it->prev;//如果it的next不为NULL
+    if (it->prev) it->prev->next = it->next;//如果it的prev不为NULL
+    sizes[it->slabs_clsid]--;//item大小为it->slabs_clsid的队列的item个数减1
+    sizes_bytes[it->slabs_clsid] -= ITEM_ntotal(it);//item大小为it->slabs_clsid的队列bytes数减
     return;
 }
 
-static void item_unlink_q(item *it) {
-    pthread_mutex_lock(&lru_locks[it->slabs_clsid]);
-    do_item_unlink_q(it);
-    pthread_mutex_unlock(&lru_locks[it->slabs_clsid]);
+static void item_unlink_q(item *it) {//将it从对应的LRU队列中删除
+    pthread_mutex_lock(&lru_locks[it->slabs_clsid]);//获取item大小为it->slabs_clsid队列的锁
+    do_item_unlink_q(it);//删除具体操作
+    pthread_mutex_unlock(&lru_locks[it->slabs_clsid]);//释放锁
 }
 
 int do_item_link(item *it, const uint32_t hv) {
@@ -519,25 +519,25 @@ void do_item_update(item *it) {
     /* Hits to COLD_LRU immediately move to WARM. */
     if (settings.lru_segmented) {
         assert((it->it_flags & ITEM_SLABBED) == 0);
-        if ((it->it_flags & ITEM_LINKED) != 0) {
+        if ((it->it_flags & ITEM_LINKED) != 0) {//是判断it是否已链接？
             if (ITEM_lruid(it) == COLD_LRU && (it->it_flags & ITEM_ACTIVE)) {
-                it->time = current_time;
-                item_unlink_q(it);
+                it->time = current_time;//时间
+                item_unlink_q(it);//删除it
                 it->slabs_clsid = ITEM_clsid(it);
                 it->slabs_clsid |= WARM_LRU;
                 it->it_flags &= ~ITEM_ACTIVE;
-                item_link_q_warm(it);
-            } else if (it->time < current_time - ITEM_UPDATE_INTERVAL) {
+                item_link_q_warm(it);//插入 warm
+            } else if (it->time < current_time - ITEM_UPDATE_INTERVAL) {//ITEM_UPDATE_INTERVAL 60
                 it->time = current_time;
             }
         }
-    } else if (it->time < current_time - ITEM_UPDATE_INTERVAL) {
+    } else if (it->time < current_time - ITEM_UPDATE_INTERVAL) {//update操作时耗时的 如果这个item频繁被访问 那么会导致过多的update 过多的一系列费时操作 此时更新时间间隔就出现 如果上一次的访问时间（也可以说是update时间）距离现在（current_time）还在更新间隔内 就不更新 超过才更新
         assert((it->it_flags & ITEM_SLABBED) == 0);
 
         if ((it->it_flags & ITEM_LINKED) != 0) {
-            it->time = current_time;
-            item_unlink_q(it);
-            item_link_q(it);
+            it->time = current_time;//更新访问时间
+            item_unlink_q(it);//删除it
+            item_link_q(it);//插入it
         }
     }
 }
