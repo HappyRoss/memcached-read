@@ -51,7 +51,7 @@ static item *heads[LARGEST_ID];//指向每一个LRU队列头
 static item *tails[LARGEST_ID];//指向每一个LRU队列尾
 static itemstats_t itemstats[LARGEST_ID];
 static unsigned int sizes[LARGEST_ID];//每一个LRU队列有多少个item
-static uint64_t sizes_bytes[LARGEST_ID];
+static uint64_t sizes_bytes[LARGEST_ID];//每一个LRU队列占用了多少btyes
 static unsigned int *stats_sizes_hist = NULL;
 static uint64_t stats_sizes_cas_min = 0;
 static int stats_sizes_buckets = 0;

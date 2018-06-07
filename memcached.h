@@ -417,7 +417,7 @@ typedef struct _stritem {//slab分配器负责分配一个item 但这个item并�
     rel_time_t      time;       /* least recent access */  //最后一次访问 绝对时间
     rel_time_t      exptime;    /* expire time */  //有效时间
     int             nbytes;     /* size of data */
-    unsigned short  refcount;
+    unsigned short  refcount; //应用计数
     uint8_t         nsuffix;    /* length of flags-and-length string */
     uint8_t         it_flags;   /* ITEM_* above */
     uint8_t         slabs_clsid;/* which slab class we're in */ //指明item属于哪个slab class

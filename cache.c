@@ -20,8 +20,8 @@ cache_t* cache_create(const char *name, size_t bufsize, size_t align,
                       cache_constructor_t* constructor,
                       cache_destructor_t* destructor) {
     cache_t* ret = calloc(1, sizeof(cache_t));
-    char* nm = strdup(name);
-    void** ptr = calloc(initial_pool_size, sizeof(void*));
+    char* nm = strdup(name);//深度拷贝name
+    void** ptr = calloc(initial_pool_size, sizeof(void*));//初始size为 64
     if (ret == NULL || nm == NULL || ptr == NULL ||
         pthread_mutex_init(&ret->mutex, NULL) == -1) {
         free(ret);

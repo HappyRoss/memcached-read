@@ -224,7 +224,7 @@ static void *assoc_maintenance_thread(void *arg) {//数据迁移线程 main函�
              * is the lowest N bits of the hv, and the bucket of item_locks is
              *  also the lowest M bits of hv, and N is greater than M.
              *  So we can process expanding with only one item_lock. cool! */
-            if ((item_lock = item_trylock(expand_bucket))) {//获取expand_bucket的锁  注在扩展函数assoc_expand中将expand_bucket设置为0 即表示从桶下标0开始进行数据迁移
+            if ((item_lock = item_trylock(expand_bucket))) {//获取expand_bucket的锁  注在扩展函数assoc_expand中将expand_bucket设置为0 即表示从桶下标0开始进行数据迁移 item_trylock是在thread.c中定义 trylock(&item_locks[hv & hashmask(item_lock_hashpower)]) 尝试获取段锁
                     for (it = old_hashtable[expand_bucket]; NULL != it; it = next) {//遍历迁移桶下标为expand_bucket的冲突链所有的item
                         next = it->h_next;//next保留旧桶冲突链
                         bucket = hash(ITEM_key(it), it->nkey) & hashmask(hashpower);//计算item新桶下标 注hashpower已经在扩展函数assoc_expand中增加了1

@@ -18,8 +18,8 @@
 
 /* An item in the connection queue. */
 enum conn_queue_item_modes {
-    queue_new_conn,   /* brand new connection. */
-    queue_redispatch, /* redispatching from side thread */
+    queue_new_conn,   /* brand new connection. */ //全新连接
+    queue_redispatch, /* redispatching from side thread */ //
 };
 typedef struct conn_queue_item CQ_ITEM;
 struct conn_queue_item {
@@ -61,10 +61,10 @@ static pthread_mutex_t worker_hang_lock;
 static CQ_ITEM *cqi_freelist;
 static pthread_mutex_t cqi_freelist_lock;
 
-static pthread_mutex_t *item_locks;
+static pthread_mutex_t *item_locks;//指向段锁数组的指针
 /* size of the item lock hash table */
-static uint32_t item_lock_count;
-unsigned int item_lock_hashpower;
+static uint32_t item_lock_count;//段锁的数量
+unsigned int item_lock_hashpower;//power 在初始化时被设置 这个在获取段锁时需用到 如&item_locks[hv & hashmask(item_lock_hashpower)]获取段锁
 #define hashsize(n) ((unsigned long int)1<<(n))
 #define hashmask(n) (hashsize(n)-1)
 
@@ -120,8 +120,8 @@ static void wait_for_thread_registration(int nthreads) {
 
 static void register_thread_initialized(void) {
     pthread_mutex_lock(&init_lock);
-    init_count++;
-    pthread_cond_signal(&init_cond);
+    init_count++;//初始化线程数加1
+    pthread_cond_signal(&init_cond);//cond_signal
     pthread_mutex_unlock(&init_lock);
     /* Force worker threads to pile up if someone wants us to */
     pthread_mutex_lock(&worker_hang_lock);
@@ -190,14 +190,14 @@ static void cq_init(CQ *cq) {
 static CQ_ITEM *cq_pop(CQ *cq) {
     CQ_ITEM *item;
 
-    pthread_mutex_lock(&cq->lock);
-    item = cq->head;
-    if (NULL != item) {
-        cq->head = item->next;
-        if (NULL == cq->head)
-            cq->tail = NULL;
+    pthread_mutex_lock(&cq->lock);//获取cq的lock
+    item = cq->head;//获取队列头item
+    if (NULL != item) {//如果item不为NULL
+        cq->head = item->next;//设置cq的head
+        if (NULL == cq->head)//如果cq的head为NULL
+            cq->tail = NULL;//设置cq的tail为NULL
     }
-    pthread_mutex_unlock(&cq->lock);
+    pthread_mutex_unlock(&cq->lock);//unlock
 
     return item;
 }
@@ -308,10 +308,10 @@ static void setup_thread(LIBEVENT_THREAD *me) {
 
     /* Listen for notifications from other threads */
     event_set(&me->notify_event, me->notify_receive_fd,
-              EV_READ | EV_PERSIST, thread_libevent_process, me);
-    event_base_set(me->base, &me->notify_event);
+              EV_READ | EV_PERSIST, thread_libevent_process, me);//监听pipe通知事件 监听 me->notify_receive_fd读事件 且为持续监听 回调函数callback为:thread_libevent_process calllback参数me
+    event_base_set(me->base, &me->notify_event);//将事件me->notify_event注册到me->base中
 
-    if (event_add(&me->notify_event, 0) == -1) {
+    if (event_add(&me->notify_event, 0) == -1) {//添加事件
         fprintf(stderr, "Can't monitor libevent notify pipe\n");
         exit(1);
     }
@@ -345,8 +345,8 @@ static void *worker_libevent(void *arg) {
     /* Any per-thread setup can happen here; memcached_thread_init() will block until
      * all threads have finished initializing.
      */
-    me->l = logger_create();
-    me->lru_bump_buf = item_lru_bump_buf_create();
+    me->l = logger_create();//logger buffer
+    me->lru_bump_buf = item_lru_bump_buf_create();//async LRU bump buffer
     if (me->l == NULL || me->lru_bump_buf == NULL) {
         abort();
     }
@@ -357,7 +357,7 @@ static void *worker_libevent(void *arg) {
 
     register_thread_initialized();
 
-    event_base_loop(me->base, 0);
+    event_base_loop(me->base, 0);//loop
     return NULL;
 }
 
@@ -366,28 +366,28 @@ static void *worker_libevent(void *arg) {
  * Processes an incoming "handle a new connection" item. This is called when
  * input arrives on the libevent wakeup pipe.
  */
-static void thread_libevent_process(int fd, short which, void *arg) {
+static void thread_libevent_process(int fd, short which, void *arg) {//worker thread监听fd可读事件  注 fd为me->notify_receive_fd which为EV_READ|EV_PERSIST  arg为me
     LIBEVENT_THREAD *me = arg;
     CQ_ITEM *item;
     char buf[1];
     conn *c;
     unsigned int timeout_fd;
 
-    if (read(fd, buf, 1) != 1) {
+    if (read(fd, buf, 1) != 1) {//读取fd
         if (settings.verbose > 0)
             fprintf(stderr, "Can't read from libevent pipe\n");
         return;
     }
 
     switch (buf[0]) {
-    case 'c':
-        item = cq_pop(me->new_conn_queue);
+    case 'c'://新连接
+        item = cq_pop(me->new_conn_queue);//work thread从自己的连接队列cq中pop出一个CQ_ITEM
 
         if (NULL == item) {
             break;
         }
         switch (item->mode) {
-            case queue_new_conn:
+            case queue_new_conn://全新连接
                 c = conn_new(item->sfd, item->init_state, item->event_flags,
                                    item->read_buffer_size, item->transport,
                                    me->base);
@@ -407,18 +407,18 @@ static void thread_libevent_process(int fd, short which, void *arg) {
                 }
                 break;
 
-            case queue_redispatch:
+            case queue_redispatch://队列重新分配 redispatching from side thread
                 conn_worker_readd(item->c);
                 break;
         }
         cqi_free(item);
         break;
     /* we were told to pause and report in */
-    case 'p':
+    case 'p'://注册
         register_thread_initialized();
         break;
     /* a client socket timed out */
-    case 't':
+    case 't'://超时
         if (read(fd, &timeout_fd, sizeof(timeout_fd)) != sizeof(timeout_fd)) {
             if (settings.verbose > 0)
                 fprintf(stderr, "Can't read timeout fd from libevent pipe\n");
@@ -705,7 +705,7 @@ void memcached_thread_init(int nthreads, void *arg) {
     int         power;
 
     for (i = 0; i < POWER_LARGEST; i++) {
-        pthread_mutex_init(&lru_locks[i], NULL);
+        pthread_mutex_init(&lru_locks[i], NULL);//初始化LRU队列锁
     }
     pthread_mutex_init(&worker_hang_lock, NULL);
 
@@ -738,42 +738,42 @@ void memcached_thread_init(int nthreads, void *arg) {
         exit(1);
     }
 
-    item_lock_count = hashsize(power);
+    item_lock_count = hashsize(power);//段锁数量为2的power次方
     item_lock_hashpower = power;
 
-    item_locks = calloc(item_lock_count, sizeof(pthread_mutex_t));
+    item_locks = calloc(item_lock_count, sizeof(pthread_mutex_t));//申请段锁数组内存 hash表中段级别的锁 并不是一个桶对应有一个桶 而是多个桶共用一个锁
     if (! item_locks) {
         perror("Can't allocate item locks");
         exit(1);
     }
     for (i = 0; i < item_lock_count; i++) {
-        pthread_mutex_init(&item_locks[i], NULL);
+        pthread_mutex_init(&item_locks[i], NULL);//初始化段级别锁
     }
 
-    threads = calloc(nthreads, sizeof(LIBEVENT_THREAD));
+    threads = calloc(nthreads, sizeof(LIBEVENT_THREAD));//申请threads内存 libevent instance
     if (! threads) {
         perror("Can't allocate thread descriptors");
         exit(1);
     }
 
-    for (i = 0; i < nthreads; i++) {
+    for (i = 0; i < nthreads; i++) {//设置nthreads的pipe
         int fds[2];
         if (pipe(fds)) {
             perror("Can't create notify pipe");
             exit(1);
         }
 
-        threads[i].notify_receive_fd = fds[0];
-        threads[i].notify_send_fd = fds[1];
+        threads[i].notify_receive_fd = fds[0];//接收fd
+        threads[i].notify_send_fd = fds[1];//发送fd
 
-        setup_thread(&threads[i]);
+        setup_thread(&threads[i]);//设置libevent thread 注意callback为thread_libevent_process
         /* Reserve three fds for the libevent base, and two for the pipe */
         stats_state.reserved_fds += 5;
     }
 
     /* Create threads after we've done all the libevent setup. */
     for (i = 0; i < nthreads; i++) {
-        create_worker(worker_libevent, &threads[i]);
+        create_worker(worker_libevent, &threads[i]);//创建work thread  function:work_libevent para:&threads[i]
     }
 
     /* Wait for all the threads to set themselves up before returning. */

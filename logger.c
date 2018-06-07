@@ -25,12 +25,12 @@
 
 
 /* TODO: put this in a struct and ditch the global vars. */
-static logger *logger_stack_head = NULL;
-static logger *logger_stack_tail = NULL;
+static logger *logger_stack_head = NULL;//loger list的头
+static logger *logger_stack_tail = NULL;//loger list的尾
 static unsigned int logger_count = 0;
 static volatile int do_run_logger_thread = 1;
 static pthread_t logger_tid;
-pthread_mutex_t logger_stack_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t logger_stack_lock = PTHREAD_MUTEX_INITIALIZER;//logger list锁
 
 pthread_key_t logger_key;
 
@@ -569,10 +569,10 @@ logger *logger_create(void) {
     l->entry_map = default_entries;
 
     pthread_mutex_init(&l->mutex, NULL);
-    pthread_setspecific(logger_key, l);
+    pthread_setspecific(logger_key, l);//pthread私有数据
 
     /* add to list of loggers */
-    logger_link_q(l);
+    logger_link_q(l);//l添加到loggeer list 
     return l;
 }
 
