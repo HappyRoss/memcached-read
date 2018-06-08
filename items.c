@@ -112,13 +112,13 @@ uint64_t get_cas_id(void) {
 }
 
 int item_is_flushed(item *it) {
-    rel_time_t oldest_live = settings.oldest_live;
+    rel_time_t oldest_live = settings.oldest_live;//需要删除item的时刻 全局变量settings的oldest_live成员存储接收到worker线程接收到flush_all命令时刻-1
     uint64_t cas = ITEM_get_cas(it);
     uint64_t oldest_cas = settings.oldest_cas;
-    if (oldest_live == 0 || oldest_live > current_time)
+    if (oldest_live == 0 || oldest_live > current_time)//不用删除item
         return 0;
     if ((it->time <= oldest_live)
-            || (oldest_cas != 0 && cas != 0 && cas < oldest_cas)) {
+            || (oldest_cas != 0 && cas != 0 && cas < oldest_cas)) {//需删除item 刷新
         return 1;
     }
     return 0;
@@ -461,12 +461,12 @@ void do_item_unlink(item *it, const uint32_t hv) {
     if ((it->it_flags & ITEM_LINKED) != 0) {
         it->it_flags &= ~ITEM_LINKED;
         STATS_LOCK();
-        stats_state.curr_bytes -= ITEM_ntotal(it);
+        stats_state.curr_bytes -= ITEM_ntotal(it);//修改统计
         stats_state.curr_items -= 1;
         STATS_UNLOCK();
-        item_stats_sizes_remove(it);
-        assoc_delete(ITEM_key(it), it->nkey, hv);
-        item_unlink_q(it);
+        item_stats_sizes_remove(it);//stats_sizes_hist统计修改
+        assoc_delete(ITEM_key(it), it->nkey, hv);//将it从hash表中移除
+        item_unlink_q(it);//将it从对应的LRU队列中删除
         do_item_remove(it);
     }
 }
@@ -475,7 +475,7 @@ void do_item_unlink(item *it, const uint32_t hv) {
 void do_item_unlink_nolock(item *it, const uint32_t hv) {
     MEMCACHED_ITEM_UNLINK(ITEM_key(it), it->nkey, it->nbytes);
     if ((it->it_flags & ITEM_LINKED) != 0) {
-        it->it_flags &= ~ITEM_LINKED;
+        it->it_flags &= ~ITEM_LINKED;//设置了it的it_flags
         STATS_LOCK();
         stats_state.curr_bytes -= ITEM_ntotal(it);
         stats_state.curr_items -= 1;
@@ -492,8 +492,8 @@ void do_item_remove(item *it) {
     assert((it->it_flags & ITEM_SLABBED) == 0);
     assert(it->refcount > 0);
 
-    if (refcount_decr(it) == 0) {
-        item_free(it);
+    if (refcount_decr(it) == 0) {//如果应用计数为0 则删除item 即回收  --(it->refcount
+        item_free(it);//it回收 回收到it所在slabclass的数组中空闲list中
     }
 }
 
@@ -885,9 +885,9 @@ void item_stats_sizes_remove(item *it) {
     if (stats_sizes_hist == NULL || stats_sizes_cas_min > ITEM_get_cas(it))
         return;
     int ntotal = ITEM_ntotal(it);
-    int bucket = ntotal / 32;
-    if ((ntotal % 32) != 0) bucket++;
-    if (bucket < stats_sizes_buckets) stats_sizes_hist[bucket]--;
+    int bucket = ntotal / 32;//计算item（大小）在stats_sizes_hist中的下标
+    if ((ntotal % 32) != 0) bucket++;//如果不能整除 则加1
+    if (bucket < stats_sizes_buckets) stats_sizes_hist[bucket]--;//bucket在stats_sizes_hist范围内 下标bucket数量减1
 }
 
 /** dumps out a list of objects of each size, with granularity of 32 bytes */
@@ -920,7 +920,7 @@ void item_stats_sizes(ADD_STAT add_stats, void *c) {
 item *do_item_get(const char *key, const size_t nkey, const uint32_t hv, conn *c, const bool do_update) {
     item *it = assoc_find(key, nkey, hv);
     if (it != NULL) {
-        refcount_incr(it);
+        refcount_incr(it); //++(it->refcount)
         /* Optimization for slab reassignment. prevents popular items from
          * jamming in busy wait. Can only do this here to satisfy lock order
          * of item_lock, slabs_lock. */
@@ -957,19 +957,19 @@ item *do_item_get(const char *key, const size_t nkey, const uint32_t hv, conn *c
     }
 
     if (it != NULL) {
-        was_found = 1;
-        if (item_is_flushed(it)) {
+        was_found = 1;//found
+        if (item_is_flushed(it)) {//玩家通过命令设置所有item过期? 判断是否需删除item 刷新  
             do_item_unlink(it, hv);
             do_item_remove(it);
             it = NULL;
-            pthread_mutex_lock(&c->thread->stats.mutex);
+            pthread_mutex_lock(&c->thread->stats.mutex);//lock
             c->thread->stats.get_flushed++;
             pthread_mutex_unlock(&c->thread->stats.mutex);
             if (settings.verbose > 2) {
                 fprintf(stderr, " -nuked by flush");
             }
             was_found = 2;
-        } else if (it->exptime != 0 && it->exptime <= current_time) {
+        } else if (it->exptime != 0 && it->exptime <= current_time) {//it过期了
             do_item_unlink(it, hv);
             do_item_remove(it);
             it = NULL;
@@ -981,7 +981,7 @@ item *do_item_get(const char *key, const size_t nkey, const uint32_t hv, conn *c
             }
             was_found = 3;
         } else {
-            if (do_update) {
+            if (do_update) {//更新
                 /* We update the hit markers only during fetches.
                  * An item needs to be hit twice overall to be considered
                  * ACTIVE, but only needs a single hit to maintain activity
@@ -1024,7 +1024,7 @@ item *do_item_touch(const char *key, size_t nkey, uint32_t exptime,
                     const uint32_t hv, conn *c) {
     item *it = do_item_get(key, nkey, hv, c, DO_UPDATE);
     if (it != NULL) {
-        it->exptime = exptime;
+        it->exptime = exptime;//有效时间
     }
     return it;
 }

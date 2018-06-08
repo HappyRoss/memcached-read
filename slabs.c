@@ -367,7 +367,7 @@ static void do_slabs_free(void *ptr, const size_t size, unsigned int id) {
         it->prev = 0;//it->prev
         it->next = p->slots;//it->next指向头
         if (it->next) it->next->prev = it;//修改指向
-        p->slots = it;//修改p->slots的指向 p->slots指向列表的头部
+        p->slots = it;//回收item p->slots指向空闲item的list 修改p->slots的指向 p->slots指向列表的头部
 
         p->sl_curr++;//可用个数++
         p->requested -= size;//
@@ -548,8 +548,8 @@ void *slabs_alloc(size_t size, unsigned int id, uint64_t *total_bytes,
     return ret;
 }
 
-void slabs_free(void *ptr, size_t size, unsigned int id) {
-    pthread_mutex_lock(&slabs_lock);
+void slabs_free(void *ptr, size_t size, unsigned int id) {//id为clsid
+    pthread_mutex_lock(&slabs_lock);//lock slabs_lock Access to the slab allocator is protected by this lock
     do_slabs_free(ptr, size, id);
     pthread_mutex_unlock(&slabs_lock);
 }

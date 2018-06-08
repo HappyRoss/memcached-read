@@ -94,7 +94,7 @@ item *assoc_find(const char *key, const size_t nkey, const uint32_t hv) {//由�
             ret = it;
             break;
         }
-        it = it->h_next;//it指向list中的next  memcacahed中是使用链地址方法解决冲突
+        it = it->h_next;//it指向list中的h_next  memcacahed中是使用链地址方法解决冲突
         ++depth;//
     }
     MEMCACHED_ASSOC_FIND(key, nkey, depth);
