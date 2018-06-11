@@ -401,7 +401,7 @@ static void item_link_q(item *it) {//将item插入到LRU队列的头部
 static void item_link_q_warm(item *it) {
     pthread_mutex_lock(&lru_locks[it->slabs_clsid]);
     do_item_link_q(it);
-    itemstats[it->slabs_clsid].moves_to_warm++;
+    itemstats[it->slabs_clsid].moves_to_warm++;//统计数据 移往warm队列的数量加1
     pthread_mutex_unlock(&lru_locks[it->slabs_clsid]);
 }
 
@@ -520,24 +520,24 @@ void do_item_update(item *it) {
     if (settings.lru_segmented) {
         assert((it->it_flags & ITEM_SLABBED) == 0);
         if ((it->it_flags & ITEM_LINKED) != 0) {//是判断it是否已链接？
-            if (ITEM_lruid(it) == COLD_LRU && (it->it_flags & ITEM_ACTIVE)) {
-                it->time = current_time;//时间
-                item_unlink_q(it);//删除it
-                it->slabs_clsid = ITEM_clsid(it);
-                it->slabs_clsid |= WARM_LRU;
-                it->it_flags &= ~ITEM_ACTIVE;
-                item_link_q_warm(it);//插入 warm
-            } else if (it->time < current_time - ITEM_UPDATE_INTERVAL) {//ITEM_UPDATE_INTERVAL 60
+            if (ITEM_lruid(it) == COLD_LRU && (it->it_flags & ITEM_ACTIVE)) {//item在cold队列 且 item状态是active 需将其移往warm队列
+                it->time = current_time;//最近访问时间
+                item_unlink_q(it);//删除it 将it从对应的LRU队列中删除 从cold队列中删除
+                it->slabs_clsid = ITEM_clsid(it);//设置it的slabs_clsid
+                it->slabs_clsid |= WARM_LRU;//使得it成为warm队列一个item 当在计算it所在队列时
+                it->it_flags &= ~ITEM_ACTIVE;//设置it的it_flags 删除ITEM_ACTIVE
+                item_link_q_warm(it);//it插入 warm队列LRU
+            } else if (it->time < current_time - ITEM_UPDATE_INTERVAL) {//距离上次访问的时间超过了ITEM_UPDATE_INTERVAL 60
                 it->time = current_time;
             }
         }
-    } else if (it->time < current_time - ITEM_UPDATE_INTERVAL) {//update操作时耗时的 如果这个item频繁被访问 那么会导致过多的update 过多的一系列费时操作 此时更新时间间隔就出现 如果上一次的访问时间（也可以说是update时间）距离现在（current_time）还在更新间隔内 就不更新 超过才更新
+    } else if (it->time < current_time - ITEM_UPDATE_INTERVAL) {//距离上次访问的时间超过了ITEM_UPDATE_INTERVAL 60 //update操作时耗时的 如果这个item频繁被访问 那么会导致过多的update 过多的一系列费时操作 此时更新时间间隔就出现 如果上一次的访问时间（也可以说是update时间）距离现在（current_time）还在更新间隔内 就不更新 超过才更新
         assert((it->it_flags & ITEM_SLABBED) == 0);
 
-        if ((it->it_flags & ITEM_LINKED) != 0) {
+        if ((it->it_flags & ITEM_LINKED) != 0) {//it在linked状态？
             it->time = current_time;//更新访问时间
-            item_unlink_q(it);//删除it
-            item_link_q(it);//插入it
+            item_unlink_q(it);//删除it 将it从对应的LRU队列中删除
+            item_link_q(it);//插入it 将item插入到LRU队列的头部 即最近访问的item最有可能会再次被访问 所以将其放置所在队列LRU头部
         }
     }
 }
@@ -991,9 +991,9 @@ item *do_item_get(const char *key, const size_t nkey, const uint32_t hv, conn *c
                 if (settings.lru_segmented) {
                     if ((it->it_flags & ITEM_ACTIVE) == 0) {
                         if ((it->it_flags & ITEM_FETCHED) == 0) {
-                            it->it_flags |= ITEM_FETCHED;
+                            it->it_flags |= ITEM_FETCHED;//注 设置了it的it_flags
                         } else {
-                            it->it_flags |= ITEM_ACTIVE;
+                            it->it_flags |= ITEM_ACTIVE;//注 设置了it的it_flags
                             if (ITEM_lruid(it) != COLD_LRU) {
                                 do_item_update(it); // bump LA time
                             } else if (!lru_bump_async(c->thread->lru_bump_buf, it, hv)) {
