@@ -297,16 +297,16 @@ static void *do_slabs_alloc(const size_t size, unsigned int id, uint64_t *total_
     return ret;
 }
 
-static void do_slabs_free_chunked(item *it, const size_t size) {
-    item_chunk *chunk = (item_chunk *) ITEM_data(it);
+static void do_slabs_free_chunked(item *it, const size_t size) {//it从chunked中移除 其中it的大小为size
+    item_chunk *chunk = (item_chunk *) ITEM_data(it);//chunk 指针
     slabclass_t *p;
 
     it->it_flags = ITEM_SLABBED;
     it->slabs_clsid = 0;
     it->prev = 0;
     // header object's original classid is stored in chunk.
-    p = &slabclass[chunk->orig_clsid];
-    if (chunk->next) {
+    p = &slabclass[chunk->orig_clsid];//chunk所在slabclass数值为的位置chunk->orig_clsid
+    if (chunk->next) {//chunk修改
         chunk = chunk->next;
         chunk->prev = 0;
     } else {
@@ -316,29 +316,29 @@ static void do_slabs_free_chunked(item *it, const size_t size) {
 
     // return the header object.
     // TODO: This is in three places, here and in do_slabs_free().
-    it->prev = 0;
+    it->prev = 0;//将it移到p->slots空闲链表中
     it->next = p->slots;
     if (it->next) it->next->prev = it;
     p->slots = it;
     p->sl_curr++;
     // TODO: macro
-    p->requested -= it->nkey + 1 + it->nsuffix + sizeof(item) + sizeof(item_chunk);
+    p->requested -= it->nkey + 1 + it->nsuffix + sizeof(item) + sizeof(item_chunk);//
     if (settings.use_cas) {
         p->requested -= sizeof(uint64_t);
     }
 
     item_chunk *next_chunk;
-    while (chunk) {
+    while (chunk) {//这是要释放chunk链表 这里是while循环？
         assert(chunk->it_flags == ITEM_CHUNK);
         chunk->it_flags = ITEM_SLABBED;
-        p = &slabclass[chunk->slabs_clsid];
+        p = &slabclass[chunk->slabs_clsid];//chunk->slabs_clsid
         chunk->slabs_clsid = 0;
         next_chunk = chunk->next;
 
         chunk->prev = 0;
         chunk->next = p->slots;
         if (chunk->next) chunk->next->prev = chunk;
-        p->slots = chunk;
+        p->slots = chunk;//回收chunk 将chunk移到其所在slabclass数组的空闲list p->slots中
         p->sl_curr++;
         p->requested -= chunk->size + sizeof(item_chunk);
 
@@ -372,7 +372,7 @@ static void do_slabs_free(void *ptr, const size_t size, unsigned int id) {
         p->sl_curr++;//可用个数++
         p->requested -= size;//
     } else {
-        do_slabs_free_chunked(it, size);//待了解
+        do_slabs_free_chunked(it, size);//it从chunked中移除 待了解
     }
     return;
 }

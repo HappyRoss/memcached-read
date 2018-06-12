@@ -183,7 +183,7 @@ item *do_item_alloc_pull(const size_t ntotal, const unsigned int id) {
      */
     for (i = 0; i < 10; i++) {
         uint64_t total_bytes;
-        /* Try to reclaim memory first */
+        /* Try to reclaim memory first */ //先尝试回收内存
         if (!settings.lru_segmented) {
             lru_pull_tail(id, COLD_LRU, 0, 0, 0, NULL);
         }
@@ -259,7 +259,7 @@ item *do_item_alloc(char *key, const size_t nkey, const unsigned int flags,
         ntotal += sizeof(uint64_t);
     }
 
-    unsigned int id = slabs_clsid(ntotal);
+    unsigned int id = slabs_clsid(ntotal);//找大小为ntotal的item在slabclass数组的下标  如果返回0 表示出错了
     unsigned int hdr_id = 0;
     if (id == 0)
         return 0;
@@ -267,7 +267,7 @@ item *do_item_alloc(char *key, const size_t nkey, const unsigned int flags,
     /* This is a large item. Allocate a header object now, lazily allocate
      *  chunks while reading the upload.
      */
-    if (ntotal > settings.slab_chunk_size_max) {
+    if (ntotal > settings.slab_chunk_size_max) {//注意这里比较的是settings.slab_chunk_size_max 而在slabs_clsid中比较的settings.item_size_max
         /* We still link this item into the LRU for the larger slab class, but
          * we're pulling a header from an entirely different slab class. The
          * free routines handle large items specifically.
@@ -350,7 +350,7 @@ void item_free(item *it) {
     assert(it->refcount == 0);
 
     /* so slab size changer can tell later if item is already free or not */
-    clsid = ITEM_clsid(it);
+    clsid = ITEM_clsid(it);//ITEM_clsid用于计算出it在slabclass数组的位置
     DEBUG_REFCNT(it, 'F');
     slabs_free(it, ntotal, clsid);
 }
@@ -481,9 +481,9 @@ void do_item_unlink_nolock(item *it, const uint32_t hv) {
         stats_state.curr_items -= 1;
         STATS_UNLOCK();
         item_stats_sizes_remove(it);
-        assoc_delete(ITEM_key(it), it->nkey, hv);
-        do_item_unlink_q(it);
-        do_item_remove(it);
+        assoc_delete(ITEM_key(it), it->nkey, hv);//将it从其所在hash表中移除
+        do_item_unlink_q(it);//将it从其所在的LRU队列中移除
+        do_item_remove(it);//it应用计数减1 如果计算为0 则回收it 将it移到所在slabclass的数组中空闲list p->slots中
     }
 }
 
@@ -493,7 +493,7 @@ void do_item_remove(item *it) {
     assert(it->refcount > 0);
 
     if (refcount_decr(it) == 0) {//如果应用计数为0 则删除item 即回收  --(it->refcount
-        item_free(it);//it回收 回收到it所在slabclass的数组中空闲list中
+        item_free(it);//it回收 回收到it所在slabclass的数组中空闲list p->slots中
     }
 }
 
@@ -1037,21 +1037,21 @@ int lru_pull_tail(const int orig_id, const int cur_lru,
         const uint64_t total_bytes, const uint8_t flags, const rel_time_t max_age,
         struct lru_pull_tail_return *ret_it) {
     item *it = NULL;
-    int id = orig_id;
+    int id = orig_id;//id
     int removed = 0;
     if (id == 0)
         return 0;
 
-    int tries = 5;
+    int tries = 5;//
     item *search;
     item *next_it;
     void *hold_lock = NULL;
     unsigned int move_to_lru = 0;
     uint64_t limit = 0;
 
-    id |= cur_lru;
-    pthread_mutex_lock(&lru_locks[id]);
-    search = tails[id];
+    id |= cur_lru;//id或上了cur_lru
+    pthread_mutex_lock(&lru_locks[id]);//lock
+    search = tails[id];//static item *tails[LARGEST_ID];//指向每一个LRU队列尾
     /* We walk up *only* for locked items, and if bottom is expired. */
     for (; tries > 0 && search != NULL; tries--, search=next_it) {
         /* we might relink search mid-loop, so search->prev isn't reliable */
@@ -1065,13 +1065,13 @@ int lru_pull_tail(const int orig_id, const int cur_lru,
             tries++;
             continue;
         }
-        uint32_t hv = hash(ITEM_key(search), search->nkey);
+        uint32_t hv = hash(ITEM_key(search), search->nkey);//serch key的hash值
         /* Attempt to hash item lock the "search" item. If locked, no
          * other callers can incr the refcount. Also skip ourselves. */
         if ((hold_lock = item_trylock(hv)) == NULL)
             continue;
-        /* Now see if the item is refcount locked */
-        if (refcount_incr(search) != 2) {
+        /* Now see if the item is refcount locked */ //现在已经获取到了lock
+        if (refcount_incr(search) != 2) {//判断search计数加1后是否等于2
             /* Note pathological case with ref'ed items in tail.
              * Can still unlink the item, but it won't be reusable yet */
             itemstats[id].lrutail_reflocked++;
@@ -1080,7 +1080,7 @@ int lru_pull_tail(const int orig_id, const int cur_lru,
             if (settings.tail_repair_time &&
                     search->time + settings.tail_repair_time < current_time) {
                 itemstats[id].tailrepairs++;
-                search->refcount = 1;
+                search->refcount = 1;//search的应用计数设置为1
                 /* This will call item_remove -> item_free since refcnt is 1 */
                 do_item_unlink_nolock(search, hv);
                 item_trylock_unlock(hold_lock);
