@@ -185,7 +185,7 @@ void assoc_delete(const char *key, const size_t nkey, const uint32_t hv) {//dele
 
     if (*before) {//查找成功
         item *nxt;
-        pthread_mutex_lock(&hash_items_counter_lock);
+        pthread_mutex_lock(&hash_items_counter_lock);//lock
         hash_items--;//hash中item个数减1
         pthread_mutex_unlock(&hash_items_counter_lock);
         /* The DTrace probe cannot be triggered as the last instruction

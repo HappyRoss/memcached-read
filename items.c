@@ -474,8 +474,8 @@ void do_item_unlink(item *it, const uint32_t hv) {
 /* FIXME: Is it necessary to keep this copy/pasted code? */
 void do_item_unlink_nolock(item *it, const uint32_t hv) {
     MEMCACHED_ITEM_UNLINK(ITEM_key(it), it->nkey, it->nbytes);
-    if ((it->it_flags & ITEM_LINKED) != 0) {
-        it->it_flags &= ~ITEM_LINKED;//设置了it的it_flags
+    if ((it->it_flags & ITEM_LINKED) != 0) {//it的it_flags设置了ITEM_LINKED
+        it->it_flags &= ~ITEM_LINKED;//it的it_flags取消ITEM_LINKED的设置
         STATS_LOCK();
         stats_state.curr_bytes -= ITEM_ntotal(it);
         stats_state.curr_items -= 1;
@@ -1058,7 +1058,7 @@ int lru_pull_tail(const int orig_id, const int cur_lru,
         next_it = search->prev;
         if (search->nbytes == 0 && search->nkey == 0 && search->it_flags == 1) {
             /* We are a crawler, ignore it. */
-            if (flags & LRU_PULL_CRAWL_BLOCKS) {
+            if (flags & LRU_PULL_CRAWL_BLOCKS) {//爬虫
                 pthread_mutex_unlock(&lru_locks[id]);
                 return 0;
             }
@@ -1090,7 +1090,7 @@ int lru_pull_tail(const int orig_id, const int cur_lru,
 
         /* Expired or flushed */
         if ((search->exptime != 0 && search->exptime < current_time)
-            || item_is_flushed(search)) {
+            || item_is_flushed(search)) {//expired or flushed
             itemstats[id].reclaimed++;
             if ((search->it_flags & ITEM_FETCHED) == 0) {
                 itemstats[id].expired_unfetched++;

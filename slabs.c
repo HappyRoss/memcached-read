@@ -318,7 +318,7 @@ static void do_slabs_free_chunked(item *it, const size_t size) {//it从chunked�
     // TODO: This is in three places, here and in do_slabs_free().
     it->prev = 0;//将it移到p->slots空闲链表中
     it->next = p->slots;
-    if (it->next) it->next->prev = it;
+    if (it->next) it->next->prev = it;//it->next
     p->slots = it;
     p->sl_curr++;
     // TODO: macro
