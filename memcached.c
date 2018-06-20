@@ -6080,7 +6080,7 @@ int main (int argc, char **argv) {
     settings_init();
 
     /* Run regardless of initializing it later */
-    init_lru_crawler(NULL);
+    init_lru_crawler(NULL);//初始化(LRU爬虫线程需要条件变量和锁)
     init_lru_maintainer();
 
     /* set stderr non-buffering (for running under, say, daemontools) */
@@ -6455,9 +6455,9 @@ int main (int argc, char **argv) {
                 }
                 break;
             case LRU_CRAWLER:
-                start_lru_crawler = true;
+                start_lru_crawler = true;//LRU爬虫
                 break;
-            case LRU_CRAWLER_SLEEP:
+            case LRU_CRAWLER_SLEEP://LRU爬虫
                 if (subopts_value == NULL) {
                     fprintf(stderr, "Missing lru_crawler_sleep value\n");
                     return 1;
@@ -6468,7 +6468,7 @@ int main (int argc, char **argv) {
                     return 1;
                 }
                 break;
-            case LRU_CRAWLER_TOCRAWL:
+            case LRU_CRAWLER_TOCRAWL://LRU爬虫
                 if (subopts_value == NULL) {
                     fprintf(stderr, "Missing lru_crawler_tocrawl value\n");
                     return 1;
@@ -6824,13 +6824,13 @@ int main (int argc, char **argv) {
         exit(EX_OSERR);
     }
     /* start up worker threads if MT mode */
-    memcached_thread_init(settings.num_threads, NULL);
+    memcached_thread_init(settings.num_threads, NULL);//work thread thread.c中定义
 
     if (start_assoc_maint && start_assoc_maintenance_thread() == -1) {//启动数据迁移线程
         exit(EXIT_FAILURE);
     }
 
-    if (start_lru_crawler && start_item_crawler_thread() != 0) {
+    if (start_lru_crawler && start_item_crawler_thread() != 0) {//启动LRU爬虫crawler线程
         fprintf(stderr, "Failed to enable LRU crawler thread\n");
         exit(EXIT_FAILURE);
     }

@@ -1665,7 +1665,7 @@ void do_item_linktail_q(item *it) { /* item is the new tail */
     //assert(*tail != 0);
     assert(it != *tail);
     assert((*head && *tail) || (*head == 0 && *tail == 0));
-    it->prev = *tail;
+    it->prev = *tail;//将it插入到LRU的tail尾部
     it->next = 0;
     if (it->prev) {
         assert(it->prev->next == 0);
@@ -1707,7 +1707,7 @@ item *do_item_crawl_q(item *it) {
     tail = &tails[it->slabs_clsid];
 
     /* We've hit the head, pop off */
-    if (it->prev == 0) {
+    if (it->prev == 0) {//如果it是头部head 直接将it移除
         assert(*head == it);
         if (it->next) {
             *head = it->next;
@@ -1720,17 +1720,17 @@ item *do_item_crawl_q(item *it) {
     /* Swing ourselves in front of the next item */
     /* NB: If there is a prev, we can't be the head */
     assert(it->prev != it);
-    if (it->prev) {
-        if (*head == it->prev) {
+    if (it->prev) {//it不为NULL 即不是head
+        if (*head == it->prev) {//如果it的pre是head
             /* Prev was the head, now we're the head */
-            *head = it;
+            *head = it;//head指向it
         }
-        if (*tail == it) {
+        if (*tail == it) {//如果it是尾部tail
             /* We are the tail, now they are the tail */
-            *tail = it->prev;
+            *tail = it->prev;//tail指向it的prev
         }
         assert(it->next != it);
-        if (it->next) {
+        if (it->next) {//如果it的next不为NULL
             assert(it->prev->next == it);
             it->prev->next = it->next;
             it->next->prev = it->prev;
