@@ -254,12 +254,12 @@ item *do_item_alloc(char *key, const size_t nkey, const unsigned int flags,
     if (nbytes < 2)
         return 0;
 
-    size_t ntotal = item_make_header(nkey + 1, flags, nbytes, suffix, &nsuffix);
+    size_t ntotal = item_make_header(nkey + 1, flags, nbytes, suffix, &nsuffix);//存储item大小的空间
     if (settings.use_cas) {
         ntotal += sizeof(uint64_t);
     }
 
-    unsigned int id = slabs_clsid(ntotal);//找大小为ntotal的item在slabclass数组的下标  如果返回0 表示出错了
+    unsigned int id = slabs_clsid(ntotal);//找大小为ntotal的item在slabclass数组的下标 即根据item大小判断其属于哪个slab  如果返回0 表示出错了
     unsigned int hdr_id = 0;
     if (id == 0)
         return 0;
@@ -282,7 +282,7 @@ item *do_item_alloc(char *key, const size_t nkey, const unsigned int flags,
         if (it != NULL)
             it->it_flags |= ITEM_CHUNKED;
     } else {
-        it = do_item_alloc_pull(ntotal, id);
+        it = do_item_alloc_pull(ntotal, id);//item大小 item属于第id个slab
     }
 
     if (it == NULL) {
@@ -1665,14 +1665,14 @@ void do_item_linktail_q(item *it) { /* item is the new tail */
     //assert(*tail != 0);
     assert(it != *tail);
     assert((*head && *tail) || (*head == 0 && *tail == 0));
-    it->prev = *tail;//将it插入到LRU的tail尾部
-    it->next = 0;
-    if (it->prev) {
+    it->prev = *tail;//将it插入到LRU的tail尾部 it的prev指向*tail
+    it->next = 0;//it的next指向NULL
+    if (it->prev) {//判断it的prev是否为NULL 即it是否为头部*head
         assert(it->prev->next == 0);
-        it->prev->next = it;
+        it->prev->next = it;//it的prev不为NULL 则设置it的prev节点的next指向it
     }
-    *tail = it;
-    if (*head == 0) *head = it;
+    *tail = it;//*tail指向it
+    if (*head == 0) *head = it;//判断*head是否为NULL 如果是 则*head指向it
     return;
 }
 
@@ -1681,19 +1681,19 @@ void do_item_unlinktail_q(item *it) {
     head = &heads[it->slabs_clsid];
     tail = &tails[it->slabs_clsid];
 
-    if (*head == it) {
+    if (*head == it) {//如果it是头部*head
         assert(it->prev == 0);
-        *head = it->next;
+        *head = it->next;//设置*head指向it的next节点
     }
-    if (*tail == it) {
+    if (*tail == it) {//如果it是尾部*tail
         assert(it->next == 0);
-        *tail = it->prev;
+        *tail = it->prev;//设置*tail指向it的prev节点
     }
     assert(it->next != it);
     assert(it->prev != it);
 
-    if (it->next) it->next->prev = it->prev;
-    if (it->prev) it->prev->next = it->next;
+    if (it->next) it->next->prev = it->prev;//it的next不为NULL 设置it的next节点的prev指向it的prev节点
+    if (it->prev) it->prev->next = it->next;//it的prev不为NULL 设置it的prev节点的next指向it的next节点
     return;
 }
 
@@ -1707,14 +1707,14 @@ item *do_item_crawl_q(item *it) {
     tail = &tails[it->slabs_clsid];
 
     /* We've hit the head, pop off */
-    if (it->prev == 0) {//如果it是头部head 直接将it移除
+    if (it->prev == 0) {//如果it是头部head
         assert(*head == it);
-        if (it->next) {
-            *head = it->next;
+        if (it->next) {//it的next不NULL 即it不是tail 即双链表不只it一个节点
+            *head = it->next;//设置*head指向
             assert(it->next->prev == it);
-            it->next->prev = 0;
+            it->next->prev = 0;//it的next节点为head 则需设置该节点的prev指向NULL
         }
-        return NULL; /* Done */
+        return NULL; /* Done */ //it是头部head就会返回NULL
     }
 
     /* Swing ourselves in front of the next item */
@@ -1732,23 +1732,23 @@ item *do_item_crawl_q(item *it) {
         assert(it->next != it);
         if (it->next) {//如果it的next不为NULL
             assert(it->prev->next == it);
-            it->prev->next = it->next;
-            it->next->prev = it->prev;
+            it->prev->next = it->next;//设置it的prev节点的next指向
+            it->next->prev = it->prev;//设置it的next节点的prev指向
         } else {
             /* Tail. Move this above? */
-            it->prev->next = 0;
+            it->prev->next = 0;//it是tail 则it的prev节点next指向设置为NULL
         }
         /* prev->prev's next is it->prev */
-        it->next = it->prev;
-        it->prev = it->next->prev;
-        it->next->prev = it;
+        it->next = it->prev;//重新设置it的next和prev指向 完成it向双两边prev方向移动 it的next指向it的prev节点（双链表）
+        it->prev = it->next->prev;//it的prev指向it的next的prev节点（也就是it原先的prev->prev 且注意原先的it->prev是不为NULL）
+        it->next->prev = it;//设置it原先prev节点的prev指向it 设置it的next节点的prev指向it（双链表） 
         /* New it->prev now, if we're not at the head. */
-        if (it->prev) {
-            it->prev->next = it;
+        if (it->prev) {//判断it向prev方向移动后 it的prev是否为NULL 即it是否在head位置
+            it->prev->next = it;//it不在head位置 则需设置it的prev节点的next指向it（双链表）
         }
     }
     assert(it->next != it);
     assert(it->prev != it);
 
-    return it->next; /* success */
+    return it->next; /* success */ //返回it的next节点 注该节点是it移动之前的prev节点
 }

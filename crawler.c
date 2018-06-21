@@ -176,9 +176,9 @@ static void crawler_expired_eval(crawler_module_t *cm, item *search, uint32_t hv
     struct crawler_expired_data *d = (struct crawler_expired_data *) cm->data;
     pthread_mutex_lock(&d->lock);
     crawlerstats_t *s = &d->crawlerstats[i];
-    int is_flushed = item_is_flushed(search);
+    int is_flushed = item_is_flushed(search);//判断search是否需要flush
     if ((search->exptime != 0 && search->exptime < current_time)
-        || is_flushed) {
+        || is_flushed) {//search的exptime时间到了 即已过期失效 或 需flush(客户端发送flush_all命令，导致search失效)
         crawlers[i].reclaimed++;
         s->reclaimed++;
 
@@ -200,7 +200,7 @@ static void crawler_expired_eval(crawler_module_t *cm, item *search, uint32_t hv
         assert(search->slabs_clsid == 0);
     } else {
         s->seen++;
-        refcount_decr(search);
+        refcount_decr(search);//search的引用次数减1
         if (search->exptime == 0) {
             s->noexp++;
         } else if (search->exptime - current_time > 3599) {
@@ -309,9 +309,9 @@ static int lru_crawler_client_getbuf(crawler_client_t *c) {
 }
 
 static void lru_crawler_class_done(int i) {
-    crawlers[i].it_flags = 0;
-    crawler_count--;
-    do_item_unlinktail_q((item *)&crawlers[i]);
+    crawlers[i].it_flags = 0;//设置标志字段为0
+    crawler_count--;//需要处理LRU个数加1
+    do_item_unlinktail_q((item *)&crawlers[i]);//移除&crawlers[i]节点
     do_item_stats_add_crawl(i, crawlers[i].reclaimed,
             crawlers[i].unfetched, crawlers[i].checked);
     pthread_mutex_unlock(&lru_locks[i]);
@@ -319,7 +319,7 @@ static void lru_crawler_class_done(int i) {
         active_crawler_mod.mod->doneclass(&active_crawler_mod, i);
 }
 
-static void *item_crawler_thread(void *arg) {
+static void *item_crawler_thread(void *arg) {//LRU爬虫线程处理函数
     int i;
     int crawls_persleep = settings.crawls_persleep;//sleep时间
 
@@ -329,9 +329,9 @@ static void *item_crawler_thread(void *arg) {
     if (settings.verbose > 2)
         fprintf(stderr, "Starting LRU crawler background thread\n");
     while (do_run_lru_crawler_thread) {//while循环处理
-    pthread_cond_wait(&lru_crawler_cond, &lru_crawler_lock);//cond wait
+    pthread_cond_wait(&lru_crawler_cond, &lru_crawler_lock);//cond wait lru_crawler_start函数和stop_item_crawler_thread函数会signal这个条件变量
 
-    while (crawler_count) {
+    while (crawler_count) {//循环处理crawler_count个LRU
         item *search = NULL;
         void *hold_lock = NULL;
 
@@ -351,8 +351,8 @@ static void *item_crawler_thread(void *arg) {
                 lru_crawler_class_done(i);
                 continue;
             }
-            pthread_mutex_lock(&lru_locks[i]);//LRU队列锁
-            search = do_item_crawl_q((item *)&crawlers[i]);
+            pthread_mutex_lock(&lru_locks[i]);//LRU[i]队列锁
+            search = do_item_crawl_q((item *)&crawlers[i]);//&crawlers[i]转换为item* do_item_crawl_q函数返回crawlers[i]的前驱节点,并交换crawlers[i]和前驱节点的位置
             if (search == NULL ||
                 (crawlers[i].remaining && --crawlers[i].remaining < 1)) {
                 if (settings.verbose > 2)
@@ -360,17 +360,17 @@ static void *item_crawler_thread(void *arg) {
                 lru_crawler_class_done(i);
                 continue;
             }
-            uint32_t hv = hash(ITEM_key(search), search->nkey);
+            uint32_t hv = hash(ITEM_key(search), search->nkey);//hash value
             /* Attempt to hash item lock the "search" item. If locked, no
              * other callers can incr the refcount
              */
-            if ((hold_lock = item_trylock(hv)) == NULL) {
-                pthread_mutex_unlock(&lru_locks[i]);
+            if ((hold_lock = item_trylock(hv)) == NULL) {//尝试锁住控制这个item的哈希表段级别锁
+                pthread_mutex_unlock(&lru_locks[i]);//释放LRU[i]队列锁
                 continue;
             }
             /* Now see if the item is refcount locked */
-            if (refcount_incr(search) != 2) {
-                refcount_decr(search);
+            if (refcount_incr(search) != 2) {//引用次数加1 并判断是否为2
+                refcount_decr(search);//引用次数不为2 则将引用次数减1
                 if (hold_lock)
                     item_trylock_unlock(hold_lock);
                 pthread_mutex_unlock(&lru_locks[i]);
@@ -385,7 +385,7 @@ static void *item_crawler_thread(void *arg) {
                 pthread_mutex_unlock(&lru_locks[i]);
             }
 
-            active_crawler_mod.mod->eval(&active_crawler_mod, search, hv, i);
+            active_crawler_mod.mod->eval(&active_crawler_mod, search, hv, i);//search过期将删除 crawler_expired_eval函数
 
             if (hold_lock)
                 item_trylock_unlock(hold_lock);
@@ -460,13 +460,13 @@ int stop_item_crawler_thread(void) {
  * caller immediately releases lock.
  * thread is now safely waiting on condition before the caller returns.
  */
-int start_item_crawler_thread(void) {
+int start_item_crawler_thread(void) {//启动LRU爬虫线程
     int ret;
 
     if (settings.lru_crawler)
         return -1;
     pthread_mutex_lock(&lru_crawler_lock);//lock
-    do_run_lru_crawler_thread = 1;//设置为1
+    do_run_lru_crawler_thread = 1;//设置为1 LRU爬虫线程处理函数while循环
     if ((ret = pthread_create(&item_crawler_tid, NULL,
         item_crawler_thread, NULL)) != 0) {
         fprintf(stderr, "Can't create LRU crawler thread: %s\n",
@@ -503,7 +503,7 @@ static int do_lru_crawler_start(uint32_t id, uint32_t remaining) {
         crawlers[sid].reclaimed = 0;
         crawlers[sid].unfetched = 0;
         crawlers[sid].checked = 0;
-        do_item_linktail_q((item *)&crawlers[sid]);//crawler是一个伪item类型数组 用户要清理某一个LRU时 会在那个LRU中插入一个伪item
+        do_item_linktail_q((item *)&crawlers[sid]);//crawler是一个伪item类型数组 用户要清理某一个LRU时 会在那个LRU的尾部tai中插入一个伪item
         crawler_count++;//LRU爬虫数加1
         starts++;
     }
