@@ -1051,7 +1051,7 @@ int lru_pull_tail(const int orig_id, const int cur_lru,
 
     id |= cur_lru;//id或上了cur_lru
     pthread_mutex_lock(&lru_locks[id]);//lock
-    search = tails[id];//static item *tails[LARGEST_ID];//指向每一个LRU队列尾
+    search = tails[id];//static item *tails[LARGEST_ID];//LRU队列尾 一开始search就指向了LRU队列中最不常用的item
     /* We walk up *only* for locked items, and if bottom is expired. */
     for (; tries > 0 && search != NULL; tries--, search=next_it) {
         /* we might relink search mid-loop, so search->prev isn't reliable */
@@ -1071,7 +1071,7 @@ int lru_pull_tail(const int orig_id, const int cur_lru,
         if ((hold_lock = item_trylock(hv)) == NULL)
             continue;
         /* Now see if the item is refcount locked */ //现在已经获取到了lock
-        if (refcount_incr(search) != 2) {//判断search计数加1后是否等于2
+        if (refcount_incr(search) != 2) {//判断search计数加1后是否等于2 search指向的item的refcount等于2，这说明此时search除了本worker线程外，没有其他任何worker线程索引其。可以放心释放并重用
             /* Note pathological case with ref'ed items in tail.
              * Can still unlink the item, but it won't be reusable yet */
             itemstats[id].lrutail_reflocked++;
@@ -1087,7 +1087,7 @@ int lru_pull_tail(const int orig_id, const int cur_lru,
                 continue;
             }
         }
-
+        //因为这个循环是从lru链表的后面开始遍历的。所以一开始search就指向了最不常用的item
         /* Expired or flushed */
         if ((search->exptime != 0 && search->exptime < current_time)
             || item_is_flushed(search)) {//expired or flushed
